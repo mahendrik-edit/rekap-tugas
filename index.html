@@ -54,7 +54,9 @@ td input{width:4.4rem;padding:.35rem;text-align:center;font-size:1.05rem;min-hei
    <div class="row" style="margin-top:8px"><button class="pri" id="mk">Buat kelas</button><span id="ms" class="mu"></span></div>
   </div>
   <div id="work" class="hide">
-   <div class="card"><b>Keterangan tugas</b> <span class="mu">(ini yang dilihat siswa)</span><div class="kt" id="kt" style="margin-top:8px"></div></div>
+   <div class="card"><b>Keterangan tugas — berlaku untuk semua kelas</b> <span class="mu">(dilihat siswa)</span><div class="kt" id="kt" style="margin-top:.6rem"></div>
+    <p><button id="ob">Ubah khusus kelas ini (opsional)</button></p>
+    <div id="own" class="hide"><p class="mu">Isi hanya yang berbeda. Kosong = ikut keterangan semua kelas.</p><div class="kt" id="ko"></div></div></div>
    <div class="card">
     <div class="row" style="margin-bottom:10px"><button class="pri" id="save">Simpan</button><span id="st" class="mu"></span></div>
     <div class="wrap"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div>
@@ -65,7 +67,7 @@ td input{width:4.4rem;padding:.35rem;text-align:center;font-size:1.05rem;min-hei
 </section>
 </main>
 <script>
-const API_URL = 'https://script.google.com/macros/s/AKfycbwGAGxMlZnq3mEGm5UafvayYsCh4mj7Q5FIgfdFeWU85IAxGRYSlWlvERNd9maotXHwVQ/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycby0KeRccSTjVUj6a15h-CGp4U4Z-9othHVTS-2-weQJHdoX8z108KgBHp-0CknhhIYcbg/exec';
 const NU = 6, NT = 4;
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
@@ -100,7 +102,7 @@ $('sN').onchange = async () => {
 };
 
 // ---- Guru
-let pass = '', rows = [], dirty = new Set(), ketU = [], ketT = [], ketDirty = false;
+let pass = '', rows = [], dirty = new Set(), defU = [], defT = [], ownU = [], ownT = [], defDirty = false, ownDirty = false;
 const post = body => fetch(API_URL, { method: 'POST', body: JSON.stringify({ password: pass, ...body }) }).then(r => r.json());
 $('go').onclick = async () => {
   pass = $('pw').value; $('lerr').textContent = 'Memeriksa…';
@@ -124,18 +126,21 @@ async function loadKelas(){
   $('st').textContent = 'Memuat…'; $('work').classList.remove('hide');
   const d = await post({ action: 'list', kelas: $('gK').value }).catch(() => ({ error: 'Koneksi gagal' }));
   if (!d.ok) { $('st').textContent = d.error; return }
-  rows = d.rows; ketU = d.ketU; ketT = d.ketT; dirty.clear(); ketDirty = false; $('st').textContent = ''; draw();
+  rows = d.rows; defU = d.defU; defT = d.defT; ownU = d.ownU; ownT = d.ownT; dirty.clear(); defDirty = ownDirty = false; $('st').textContent = '';
+  $('own').classList.toggle('hide', !ownU.concat(ownT).some(x => x.trim())); draw();
 }
 function draw(){
-  const kin = (a, g, pre) => a.map((v, i) => `<div><label>${pre} ${i + 1}</label><input data-g="${g}" data-k="${i}" value="${esc(v)}" placeholder="mis. Ringkasan Bab 1"></div>`).join('');
-  $('kt').innerHTML = kin(ketU, 'ku', 'Tugas utama') + kin(ketT, 'kt', 'Tambahan');
-  $('th').innerHTML = '<tr><th>Nama</th>' + [...Array(NU)].map((_, i) => `<th title="${esc(ketU[i])}">U${i + 1}</th>`).join('') + [...Array(NT)].map((_, i) => `<th title="${esc(ketT[i])}">T${i + 1}</th>`).join('') + '<th>+Tmbh</th><th>Akhir</th></tr>';
+  const kin = (a, g, pre, ph) => a.map((v, i) => `<div><label>${pre} ${i + 1}</label><input data-g="${g}" data-k="${i}" value="${esc(v)}" placeholder="${ph ? esc(ph[i] || 'ikut semua kelas') : 'mis. Ringkasan Bab 1'}"></div>`).join('');
+  $('kt').innerHTML = kin(defU, 'du', 'Tugas utama') + kin(defT, 'dt', 'Tambahan');
+  $('ko').innerHTML = kin(ownU, 'ou', 'Tugas utama', defU) + kin(ownT, 'ot', 'Tambahan', defT);
+  $('th').innerHTML = '<tr><th>Nama</th>' + [...Array(NU)].map((_, i) => `<th title="${esc(ownU[i] || defU[i])}">U${i + 1}</th>`).join('') + [...Array(NT)].map((_, i) => `<th title="${esc(ownT[i] || defT[i])}">T${i + 1}</th>`).join('') + '<th>+Tmbh</th><th>Akhir</th></tr>';
   $('tb').innerHTML = rows.map((s, i) => `<tr><td class="n">${esc(s.nama)}</td>` +
     s.u.map((v, k) => `<td><input data-i="${i}" data-g="u" data-k="${k}" value="${v}"></td>`).join('') +
     s.t.map((v, k) => `<td><input data-i="${i}" data-g="t" data-k="${k}" value="${v}"></td>`).join('') +
     `<td id="b${i}">${r2(tamb(s.t))}</td><td id="a${i}"><b>${r2(akhir(s.u, s.t))}</b></td></tr>`).join('');
 }
-$('kt').oninput = e => { const t = e.target, a = t.dataset.g === 'ku' ? ketU : ketT; a[t.dataset.k] = t.value; ketDirty = true; $('st').textContent = 'Ada perubahan belum disimpan' };
+const ketIn = e => { const t = e.target, m = { du: defU, dt: defT, ou: ownU, ot: ownT }[t.dataset.g]; if (!m) return; m[t.dataset.k] = t.value; if (t.dataset.g[0] === 'd') defDirty = true; else ownDirty = true; $('st').textContent = 'Ada perubahan belum disimpan' };
+$('kt').oninput = ketIn; $('ko').oninput = ketIn; $('ob').onclick = () => $('own').classList.toggle('hide');
 const colInfo = c => c < NU ? ['u', c] : ['t', c - NU];
 function refreshRow(i){ const s = rows[i]; $('b' + i).textContent = r2(tamb(s.t)); $('a' + i).innerHTML = `<b>${r2(akhir(s.u, s.t))}</b>`; $('st').textContent = 'Ada perubahan belum disimpan' }
 function setCell(i, c, raw, rewrite){
@@ -186,9 +191,9 @@ let fs = 18; try { fs = +localStorage.getItem('fs') || 18 } catch (e) {}
 const setFs = d => { fs = Math.min(28, Math.max(15, fs + d)); document.documentElement.style.fontSize = fs + 'px'; try { localStorage.setItem('fs', fs) } catch (e) {} };
 $('fm').onclick = () => setFs(-2); $('fp').onclick = () => setFs(2); setFs(0);
 $('save').onclick = async () => {
-  if (!dirty.size && !ketDirty) return; $('st').textContent = 'Menyimpan…';
+  if (!dirty.size && !defDirty && !ownDirty) return; $('st').textContent = 'Menyimpan…';
   const changes = [...dirty].map(i => ({ row: rows[i].row, u: rows[i].u, t: rows[i].t }));
-  const d = await post({ action: 'save', kelas: $('gK').value, changes, ketU, ketT }).catch(() => ({ error: 'Koneksi gagal' }));
-  if (d.ok) { dirty.clear(); ketDirty = false; $('st').textContent = 'Tersimpan ✓' } else $('st').textContent = 'Gagal: ' + d.error;
+  const d = await post({ action: 'save', kelas: $('gK').value, changes, ...(defDirty ? { defU, defT } : {}), ...(ownDirty ? { ownU, ownT } : {}) }).catch(() => ({ error: 'Koneksi gagal' }));
+  if (d.ok) { dirty.clear(); defDirty = ownDirty = false; $('st').textContent = 'Tersimpan ✓' } else $('st').textContent = 'Gagal: ' + d.error;
 };
 </script></body></html>
